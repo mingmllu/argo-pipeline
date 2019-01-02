@@ -38,7 +38,21 @@ $ kubectl create rolebinding default-admin --clusterrole=admin --serviceaccount=
 ```
 $ argo submit --watch https://raw.githubusercontent.com/argoproj/argo/master/examples/hello-world.yaml
 ```
-
+The yaml file is as below:
+```
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: hello-world-
+spec:
+  entrypoint: whalesay
+  templates:
+  - name: whalesay
+    container:
+      image: docker/whalesay:latest
+      command: [cowsay]
+      args: ["hello world"]
+```
 List workflows
 ```
 $ argo list
@@ -82,7 +96,53 @@ $ argo logs hello-world-2t7jc
 ```
 
 ### Example 2
+The yaml file used in this example is as below:
+```
+# The coinflip example combines the use of a script result,
+# along with conditionals, to take a dynamic path in the
+# workflow. In this example, depending on the result of the
+# first step, 'flip-coin', the template will either run the
+# 'heads' step or the 'tails' step.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: coinflip-
+spec:
+  entrypoint: coinflip
+  templates:
+  - name: coinflip
+    steps:
+    - - name: flip-coin
+        template: flip-coin
+    - - name: heads
+        template: heads
+        when: "{{steps.flip-coin.outputs.result}} == heads"
+      - name: tails
+        template: tails
+        when: "{{steps.flip-coin.outputs.result}} == tails"
 
+  - name: flip-coin
+    script:
+      image: python:alpine3.6
+      command: [python]
+      source: |
+        import random
+        result = "heads" if random.randint(0,1) == 0 else "tails"
+        print(result)
+
+  - name: heads
+    container:
+      image: alpine:3.6
+      command: [sh, -c]
+      args: ["echo \"it was heads\""]
+
+  - name: tails
+    container:
+      image: alpine:3.6
+      command: [sh, -c]
+      args: ["echo \"it was tails\""]
+```
+You can download the yaml file from the URL https://raw.githubusercontent.com/argoproj/argo/master/examples/coinflip.yaml.
 ```
 $ argo submit --watch https://raw.githubusercontent.com/argoproj/argo/master/examples/coinflip.yaml
 Name:                coinflip-6kvxp
@@ -454,6 +514,42 @@ heads
 ```
 
 ### Example 3
+
+The example 3 uses the the following yaml file
+```
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: loops-maps-
+spec:
+  entrypoint: loop-map-example
+  templates:
+  - name: loop-map-example
+    steps:
+    - - name: test-linux
+        template: cat-os-release
+        arguments:
+          parameters:
+          - name: image
+            value: "{{item.image}}"
+          - name: tag
+            value: "{{item.tag}}"
+        withItems:
+        - { image: 'debian', tag: '9.1' }
+        - { image: 'debian', tag: '8.9' }
+        - { image: 'alpine', tag: '3.6' }
+        - { image: 'ubuntu', tag: '17.10' }
+
+  - name: cat-os-release
+    inputs:
+      parameters:
+      - name: image
+      - name: tag
+    container:
+      image: "{{inputs.parameters.image}}:{{inputs.parameters.tag}}"
+      command: [cat]
+      args: [/etc/os-release]
+```
 
 ```
 $ argo submit --watch https://raw.githubusercontent.com/argoproj/argo/master/examples/loops-maps.yaml
